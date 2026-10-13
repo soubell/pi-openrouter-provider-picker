@@ -5,6 +5,9 @@ const AUTO_LABEL = "Automatic — use model/OpenRouter routing settings";
 const CUSTOM_LABEL = "Enter a provider slug…";
 const STATUS_KEY = "openrouter-provider";
 
+/** Endpoints at or above this uptime are not worth flagging in the menu. */
+const UPTIME_WARNING_THRESHOLD = 95;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -38,12 +41,48 @@ function formatPriceSuffix(pricing: unknown): string {
   addPerToken("in", pricing.prompt);
   addPerToken("out", pricing.completion);
 
+  // Cached input is billed at its own (cheaper) rate; only mention a real discount.
+  const cache = asNumber(pricing.input_cache_read);
+  const input = asNumber(pricing.prompt);
+  const cheaperCache =
+    Number.isFinite(cache) &&
+    cache > 0 &&
+    !(Number.isFinite(input) && input > 0 && cache >= input);
+  if (cheaperCache) {
+    parts.push(`cache $${formatUsd(cache * 1_000_000)}/M`);
+  }
+
   const perRequest = asNumber(pricing.request);
   if (Number.isFinite(perRequest) && perRequest > 0) {
     parts.push(`$${formatUsd(perRequest)}/req`);
   }
 
   return parts.length > 0 ? ` · ${parts.join(" · ")}` : "";
+}
+
+/**
+ * Prefer the freshest window that actually carries traffic. `null` means no
+ * traffic was observed, which is not the same as being down.
+ */
+function firstUptime(endpoint: Record<string, unknown>): number | undefined {
+  for (const key of ["uptime_last_5m", "uptime_last_30m", "uptime_last_1d"]) {
+    const uptime = asNumber(endpoint[key]);
+    if (Number.isFinite(uptime)) return uptime;
+  }
+  return undefined;
+}
+
+/** Flag a degraded endpoint only; healthy ones stay out of the way. */
+function formatUptimeWarning(endpoint: unknown): string {
+  if (!isRecord(endpoint)) return "";
+  const uptime = firstUptime(endpoint);
+  if (uptime === undefined || uptime >= UPTIME_WARNING_THRESHOLD) return "";
+  return ` · ⚠ up ${Math.floor(uptime)}%`;
+}
+
+function formatEndpointLabel(endpoint: unknown, tag: string, providerName: string): string {
+  const base = isRecord(endpoint) ? endpoint : {};
+  return `${providerName} — ${tag}${formatPriceSuffix(base.pricing)}${formatUptimeWarning(base)}`;
 }
 
 async function getEndpointChoices(modelId: string, apiKey: string) {
@@ -76,7 +115,7 @@ async function getEndpointChoices(modelId: string, apiKey: string) {
     if (!isRecord(value) || typeof value.tag !== "string" || !value.tag) continue;
     const tag = value.tag;
     const providerName = typeof value.provider_name === "string" ? value.provider_name : tag;
-    byTag.set(tag, `${providerName} — ${tag}${formatPriceSuffix(value.pricing)}`);
+    byTag.set(tag, formatEndpointLabel(value, tag, providerName));
   }
 
   return [...byTag.entries()].map(([slug, label]) => ({ slug, label }));

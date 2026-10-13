@@ -22,11 +22,23 @@ pi install npm:pi-openrouter-provider-picker
    current price, for example:
 
    ```text
-   OpenAI — openai · in $30/M · out $60/M
+   OpenAI — openai · in $30/M · out $60/M · cache $7.50/M
    ```
 
-   `in` and `out` are USD per million input and output tokens. Endpoints that
-   publish no price (for example free tiers) show no price at all.
+   `in` and `out` are USD per million input and output tokens. `cache` is the
+   discounted rate for cached input tokens and only appears when it is cheaper
+   than the regular input rate. Endpoints that publish no price (for example
+   free tiers) show no price at all.
+
+   Endpoints that have recently stopped responding are flagged with their
+   uptime over the most recent window that carries traffic:
+
+   ```text
+   Chutes — chutes · in $0.05/M · out $0.1/M · ⚠ up 62%
+   ```
+
+   Endpoints at or above 95% uptime are not flagged. A `null` uptime means no
+   traffic was observed, not an outage, so it is never shown.
 
 3. The selected endpoint is pinned for that model; provider fallback is disabled.
 4. When you switch models, this extension clears its selection. The new model uses its normal routing.
