@@ -9,6 +9,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function asNumber(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return value.trim() === "" ? Number.NaN : Number(value);
+  return Number.NaN;
+}
+
+/** Render a USD amount without trailing zeros (e.g. 30, 0.025, 0.001). */
+function formatUsd(amount: number): string {
+  const text = amount >= 1 ? amount.toFixed(2) : amount.toPrecision(3);
+  return text.includes(".") ? text.replace(/\.?0+$/, "") : text;
+}
+
+/**
+ * OpenRouter prices `prompt`/`completion` per token (USD), while `request` is
+ * charged per request. Returns "" when the endpoint publishes no pricing.
+ */
+function formatPriceSuffix(pricing: unknown): string {
+  if (!isRecord(pricing)) return "";
+
+  const parts: string[] = [];
+  const addPerToken = (label: string, raw: unknown): void => {
+    const perToken = asNumber(raw);
+    if (!Number.isFinite(perToken) || perToken <= 0) return;
+    parts.push(`${label} $${formatUsd(perToken * 1_000_000)}/M`);
+  };
+
+  addPerToken("in", pricing.prompt);
+  addPerToken("out", pricing.completion);
+
+  const perRequest = asNumber(pricing.request);
+  if (Number.isFinite(perRequest) && perRequest > 0) {
+    parts.push(`$${formatUsd(perRequest)}/req`);
+  }
+
+  return parts.length > 0 ? ` · ${parts.join(" · ")}` : "";
+}
+
 async function getEndpointChoices(modelId: string, apiKey: string) {
   const slash = modelId.indexOf("/");
   if (slash <= 0 || slash === modelId.length - 1) {
@@ -39,7 +76,7 @@ async function getEndpointChoices(modelId: string, apiKey: string) {
     if (!isRecord(value) || typeof value.tag !== "string" || !value.tag) continue;
     const tag = value.tag;
     const providerName = typeof value.provider_name === "string" ? value.provider_name : tag;
-    byTag.set(tag, `${providerName} — ${tag}`);
+    byTag.set(tag, `${providerName} — ${tag}${formatPriceSuffix(value.pricing)}`);
   }
 
   return [...byTag.entries()].map(([slug, label]) => ({ slug, label }));

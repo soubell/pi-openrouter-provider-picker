@@ -17,6 +17,17 @@ pi install npm:pi-openrouter-provider-picker
 
 1. In Pi, use `/model` to select an OpenRouter model.
 2. Run `/or-provider` and choose one of the endpoints listed for that model.
+
+   Each entry shows the provider name, its routing tag, and that endpoint's
+   current price, for example:
+
+   ```text
+   OpenAI — openai · in $30/M · out $60/M
+   ```
+
+   `in` and `out` are USD per million input and output tokens. Endpoints that
+   publish no price (for example free tiers) show no price at all.
+
 3. The selected endpoint is pinned for that model; provider fallback is disabled.
 4. When you switch models, this extension clears its selection. The new model uses its normal routing.
 
