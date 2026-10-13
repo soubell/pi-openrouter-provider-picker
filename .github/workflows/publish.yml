@@ -4,6 +4,18 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Publish nothing (test only)'
+        type: boolean
+        default: true
+
+# 誤ったリリースを防ぐため、実行は常に「待機」にする
+# (GitHub 画面で Approve するまで publish されない)
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   id-token: write   # OIDC に必須（Trusted Publishing 用）
@@ -12,6 +24,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: npm   # ←承認ゲート（required reviewer）
     steps:
       - uses: actions/checkout@v6
 
@@ -31,5 +44,28 @@ jobs:
           fi
           echo "Publishing $PKG"
 
+      - name: Skip if version already exists on npm
+        id: already
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$VER is already on npm — skipping publish"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Choose publish mode
+        id: mode
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "flag=--dry-run" >> "$GITHUB_OUTPUT"
+            echo "::notice::dry run — nothing will be published"
+          else
+            echo "flag=--access public" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to npm
-        run: npm publish --access public
+        if: steps.already.outputs.skip != 'true'
+        run: npm publish ${{ steps.mode.outputs.flag }}
