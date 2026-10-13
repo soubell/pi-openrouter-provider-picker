@@ -80,9 +80,67 @@ function formatUptimeWarning(endpoint: unknown): string {
   return ` · ⚠ up ${Math.floor(uptime)}%`;
 }
 
-function formatEndpointLabel(endpoint: unknown, tag: string, providerName: string): string {
-  const base = isRecord(endpoint) ? endpoint : {};
-  return `${providerName} — ${tag}${formatPriceSuffix(base.pricing)}${formatUptimeWarning(base)}`;
+/**
+ * East Asian wide/fullwidth ranges. Provider names are normally ASCII, so this
+ * only matters when a name carries CJK text.
+ */
+const WIDE_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x1100, 0x115f], [0x2e80, 0x303e], [0x3041, 0x33ff], [0x3400, 0x4dbf],
+  [0x4e00, 0x9fff], [0xa000, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff],
+  [0xfe10, 0xfe19], [0xfe30, 0xfe6f], [0xff00, 0xff60], [0xffe0, 0xffe6],
+  [0x1f300, 0x1f64f], [0x1f900, 0x1f9ff], [0x20000, 0x3fffd],
+];
+
+/** Terminal columns a string occupies, so menu columns can be aligned. */
+function displayWidth(text: string): number {
+  let width = 0;
+  for (const character of text) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    width += WIDE_RANGES.some(([low, high]) => codePoint >= low && codePoint <= high)
+      ? 2
+      : 1;
+  }
+  return width;
+}
+
+function padEndWidth(text: string, target: number): string {
+  const missing = target - displayWidth(text);
+  return missing > 0 ? text + " ".repeat(missing) : text;
+}
+
+type EndpointChoice = {
+  slug: string;
+  base: string;
+  price: string;
+  health: string;
+};
+
+function buildChoice(endpoint: unknown, tag: string, providerName: string): EndpointChoice {
+  const value = isRecord(endpoint) ? endpoint : {};
+  return {
+    slug: tag,
+    base: `${providerName} — ${tag}`,
+    price: formatPriceSuffix(value.pricing),
+    health: formatUptimeWarning(value),
+  };
+}
+
+/**
+ * Pad the name and price blocks to their widest entry so every price starts at
+ * the same column and the health flag lines up at the end.
+ */
+function alignChoices(choices: EndpointChoice[]): Array<{ slug: string; label: string }> {
+  const baseWidth = Math.max(0, ...choices.map((c) => displayWidth(c.base)));
+  const priceWidth = Math.max(0, ...choices.map((c) => displayWidth(c.price)));
+
+  return choices.map((choice) => ({
+    slug: choice.slug,
+    label: (
+      padEndWidth(choice.base, baseWidth) +
+      padEndWidth(choice.price, priceWidth) +
+      choice.health
+    ).trimEnd(),
+  }));
 }
 
 async function getEndpointChoices(modelId: string, apiKey: string) {
@@ -110,15 +168,15 @@ async function getEndpointChoices(modelId: string, apiKey: string) {
   const endpoints = Array.isArray(data?.endpoints) ? data.endpoints : undefined;
   if (!endpoints) throw new Error("OpenRouter returned an unexpected endpoint-list response.");
 
-  const byTag = new Map<string, string>();
+  const byTag = new Map<string, EndpointChoice>();
   for (const value of endpoints) {
     if (!isRecord(value) || typeof value.tag !== "string" || !value.tag) continue;
     const tag = value.tag;
     const providerName = typeof value.provider_name === "string" ? value.provider_name : tag;
-    byTag.set(tag, formatEndpointLabel(value, tag, providerName));
+    byTag.set(tag, buildChoice(value, tag, providerName));
   }
 
-  return [...byTag.entries()].map(([slug, label]) => ({ slug, label }));
+  return alignChoices([...byTag.values()]);
 }
 
 export default function openRouterProviderExtension(pi: ExtensionAPI) {
