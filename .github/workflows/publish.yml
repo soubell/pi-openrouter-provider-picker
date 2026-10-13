@@ -35,6 +35,7 @@ jobs:
           package-manager-cache: false   # リリースビルドではキャッシュしない
 
       - name: Verify tag matches package.json version
+        if: github.ref_type == 'tag'
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(node -p "require('./package.json').version")
@@ -59,7 +60,10 @@ jobs:
       - name: Choose publish mode
         id: mode
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "flag=--dry-run" >> "$GITHUB_OUTPUT"
+            echo "notice: manual run is test only"
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
             echo "flag=--dry-run" >> "$GITHUB_OUTPUT"
             echo "::notice::dry run — nothing will be published"
           else
