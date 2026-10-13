@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Choose an upstream provider for OpenRouter models in Pi",
   "author": "soubell",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soubell/pi-openrouter-provider-picker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/soubell/pi-openrouter-provider-picker/issues"
+  },
+  "homepage": "https://github.com/soubell/pi-openrouter-provider-picker#readme",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
