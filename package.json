@@ -1,0 +1,27 @@
+{
+  "name": "pi-openrouter-provider-picker",
+  "version": "0.1.0",
+  "description": "Choose an upstream provider for OpenRouter models in Pi",
+  "author": "soubell",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "openrouter"
+  ],
+  "files": [
+    "README.md",
+    "extensions/openrouter-provider.ts"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/openrouter-provider.ts"
+    ]
+  }
+}
